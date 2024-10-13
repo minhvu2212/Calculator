@@ -7,16 +7,13 @@ import android.widget.TextView
 
 class MainActivity : AppCompatActivity() {
     private lateinit var resultTextView: TextView
-    private var currentInput = ""
-    private var currentOperator = ""
-    private var firstOperand = 0
+    private var currentExpression = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Tìm TextView hiển thị kết quả
-        resultTextView = findViewById<TextView>(R.id.result_text)
+        resultTextView = findViewById(R.id.result_text)
 
         setupNumberButtons()
         setupOperatorButtons()
@@ -28,10 +25,7 @@ class MainActivity : AppCompatActivity() {
         for (number in numberButtons) {
             val buttonId = resources.getIdentifier("button_$number", "id", packageName)
             findViewById<Button>(buttonId).setOnClickListener {
-                if (currentInput.length < 9) {  // Giới hạn độ dài đầu vào
-                    currentInput += number
-                    updateDisplay()
-                }
+                appendToExpression(number)
             }
         }
     }
@@ -47,80 +41,124 @@ class MainActivity : AppCompatActivity() {
         for ((buttonName, operator) in operators) {
             val buttonId = resources.getIdentifier(buttonName, "id", packageName)
             findViewById<Button>(buttonId).setOnClickListener {
-                if (currentInput.isNotEmpty()) {
-                    if (currentOperator.isEmpty()) {
-                        firstOperand = currentInput.toInt()
-                        currentOperator = operator
-                        currentInput = ""
-                    } else {
-                        calculate()
-                        currentOperator = operator
-                    }
+                if (currentExpression.isNotEmpty() && !currentExpression.endsWith(operator)) {
+                    appendToExpression(operator)
                 }
             }
         }
 
         findViewById<Button>(R.id.button_equals).setOnClickListener {
-            if (currentInput.isNotEmpty() && currentOperator.isNotEmpty()) {
+            if (currentExpression.isNotEmpty()) {
                 calculate()
-                currentOperator = ""
             }
         }
     }
 
     private fun setupSpecialButtons() {
-        // CE button
         findViewById<Button>(R.id.button_ce).setOnClickListener {
-            currentInput = ""
-            updateDisplay()
+            clearEntry()
         }
 
-        // C button
         findViewById<Button>(R.id.button_c).setOnClickListener {
-            currentInput = ""
-            currentOperator = ""
-            firstOperand = 0
+            clearAll()
+        }
+
+        findViewById<Button>(R.id.button_bs).setOnClickListener {
+            backspace()
+        }
+
+        findViewById<Button>(R.id.button_sign).setOnClickListener {
+            changeSign()
+        }
+
+        findViewById<Button>(R.id.button_dot).setOnClickListener {
+            appendDecimalPoint()
+        }
+    }
+
+    private fun appendToExpression(value: String) {
+        currentExpression += value
+        updateDisplay()
+    }
+
+    private fun clearEntry() {
+        val lastOperatorIndex = currentExpression.indexOfLast { it in setOf('+', '-', 'x', '/') }
+        if (lastOperatorIndex != -1) {
+            currentExpression = currentExpression.substring(0, lastOperatorIndex + 1)
+        } else {
+            currentExpression = ""
+        }
+        updateDisplay()
+    }
+
+    private fun clearAll() {
+        currentExpression = ""
+        updateDisplay()
+    }
+
+    private fun backspace() {
+        if (currentExpression.isNotEmpty()) {
+            currentExpression = currentExpression.dropLast(1)
             updateDisplay()
         }
+    }
 
-        // BS button
-        findViewById<Button>(R.id.button_bs).setOnClickListener {
-            if (currentInput.isNotEmpty()) {
-                currentInput = currentInput.dropLast(1)
-                updateDisplay()
-            }
-        }
-
-        // +/- button
-        findViewById<Button>(R.id.button_sign).setOnClickListener {
-            if (currentInput.isNotEmpty()) {
-                currentInput = if (currentInput.startsWith("-")) {
-                    currentInput.substring(1)
+    private fun changeSign() {
+        if (currentExpression.isNotEmpty()) {
+            val lastOperatorIndex = currentExpression.indexOfLast { it in setOf('+', '-', 'x', '/') }
+            if (lastOperatorIndex == -1) {
+                currentExpression = if (currentExpression.startsWith("-")) {
+                    currentExpression.substring(1)
                 } else {
-                    "-$currentInput"
+                    "-$currentExpression"
                 }
-                updateDisplay()
+            } else {
+                val lastNumber = currentExpression.substring(lastOperatorIndex + 1)
+                if (lastNumber.isNotEmpty()) {
+                    currentExpression = currentExpression.substring(0, lastOperatorIndex + 1) +
+                            if (lastNumber.startsWith("-")) lastNumber.substring(1) else "-$lastNumber"
+                }
             }
+            updateDisplay()
+        }
+    }
+
+    private fun appendDecimalPoint() {
+        val lastOperatorIndex = currentExpression.indexOfLast { it in setOf('+', '-', 'x', '/') }
+        val lastNumber = if (lastOperatorIndex == -1) currentExpression else currentExpression.substring(lastOperatorIndex + 1)
+        if (!lastNumber.contains(".")) {
+            currentExpression += if (lastNumber.isEmpty()) "0." else "."
+            updateDisplay()
         }
     }
 
     private fun calculate() {
-        if (currentInput.isNotEmpty()) {
-            val secondOperand = currentInput.toInt()
-            val result = when (currentOperator) {
-                "+" -> firstOperand + secondOperand
-                "-" -> firstOperand - secondOperand
-                "x" -> firstOperand * secondOperand
-                "/" -> if (secondOperand != 0) firstOperand / secondOperand else 0
-                else -> secondOperand
-            }
-            currentInput = result.toString()
+        try {
+            val result = evaluateExpression(currentExpression)
+            currentExpression = result.toString()
             updateDisplay()
-            firstOperand = result
+        } catch (e: Exception) {
+            resultTextView.text = "Error"
         }
     }
 
+    private fun evaluateExpression(expression: String): Double {
+        val parts = expression.replace("x", "*").split("+", "-", "*", "/")
+        val operators = expression.replace("x", "*").filter { it in setOf('+', '-', '*', '/') }
+
+        var result = parts[0].toDouble()
+        for (i in operators.indices) {
+            when (operators[i]) {
+                '+' -> result += parts[i + 1].toDouble()
+                '-' -> result -= parts[i + 1].toDouble()
+                '*' -> result *= parts[i + 1].toDouble()
+                '/' -> result /= parts[i + 1].toDouble()
+            }
+        }
+        return result
+    }
+
     private fun updateDisplay() {
-        resultTextView.text = if (currentInput.isEmpty()) "0" else currentInput
+        resultTextView.text = if (currentExpression.isEmpty()) "0" else currentExpression
     }
 }
